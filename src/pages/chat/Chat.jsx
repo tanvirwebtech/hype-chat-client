@@ -1,23 +1,39 @@
 // import React from "react";
 // import "./ChatPage.css"; // Import your Tailwind CSS classes here
 
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import avatar from "../../assets/avatar-icon.png";
 import { UserContext } from "./../../context/userContext";
+
 import { useForm } from "react-hook-form";
+import { uniqBy } from "lodash";
+import axios from "axios";
+
 const ChatPage = () => {
     // eslint-disable-next-line no-unused-vars
     const [ws, setWs] = useState(null);
     const [onlinePeople, setOnlinePeople] = useState({});
     const [selectedContact, setSelectedContact] = useState(null);
     const { userId } = useContext(UserContext);
+    const [messages, setMessages] = useState([]);
 
+    const divUnderMessages = useRef();
     const { register, handleSubmit, reset } = useForm();
     useEffect(() => {
+        connectToWebSocket();
+    }, []);
+
+    const connectToWebSocket = () => {
         const ws = new WebSocket("ws://localhost:4040");
         setWs(ws);
         ws.addEventListener("message", handleMsg);
-    }, []);
+        ws.addEventListener("close", () => {
+            setTimeout(() => {
+                connectToWebSocket();
+                console.log("trying to re-connect");
+            }, 1000);
+        });
+    };
 
     const showPeopleOnline = (peopleData) => {
         const people = {};
@@ -30,10 +46,15 @@ const ChatPage = () => {
     const excCurrentUser = { ...onlinePeople };
     delete excCurrentUser[userId];
 
+    const messagesWithOutDupes = uniqBy(messages, "id");
+
     const handleMsg = (e) => {
+        console.log(e);
         const msgData = JSON.parse(e.data);
         if ("online" in msgData) {
             showPeopleOnline(msgData.online);
+        } else {
+            setMessages((prev) => [...prev, { ...msgData }]);
         }
     };
     console.log(selectedContact);
@@ -41,15 +62,43 @@ const ChatPage = () => {
     const msgSubmit = (data) => {
         const msg = data;
         const sendMsg = {
-            message: {
-                ...msg,
-                recipient: selectedContact,
-            },
+            ...msg,
+            recipient: selectedContact,
         };
         console.log(sendMsg);
         ws.send(JSON.stringify(sendMsg));
+        setMessages((prev) => [
+            ...prev,
+            {
+                text: msg.text,
+                sender: userId,
+                recipient: selectedContact,
+                id: Date.now(),
+            },
+        ]);
+
         reset();
     };
+
+    useEffect(() => {
+        const div = divUnderMessages.current;
+        if (div) {
+            div.scrollIntoView({ behavior: "smooth", block: "end" });
+        }
+    }, [messages]);
+
+    useEffect(() => {
+        if (selectedContact) {
+            axios.get(`/messages/${selectedContact}`).then((res) => {
+                const data = res.data;
+                const newMsgData = data.map((msg) => ({
+                    ...msg, // Copy the existing properties of the object
+                    id: msg._id, // Add the "id" property with the value of "_id"
+                }));
+                setMessages(newMsgData);
+            });
+        }
+    }, [selectedContact]);
 
     return (
         <div className="flex h-screen">
@@ -80,7 +129,7 @@ const ChatPage = () => {
             </div>
             <div className="w-3/4 bg-gray-100 p-4 flex flex-col justify-between">
                 {/* Right Column - Conversation */}
-                <div className="bg-white p-4 flex-1 overflow-y-auto mb-4">
+                <div className="bg-white p-4 flex-1   mb-4">
                     {/* Chat messages */}
 
                     {!selectedContact && (
@@ -88,6 +137,36 @@ const ChatPage = () => {
                             <p className="text-xl">
                                 &larr; Select a user to see conversation!
                             </p>
+                        </div>
+                    )}
+                    {!!selectedContact && (
+                        <div className="relative h-full">
+                            <div className="overflow-y-scroll absolute top-0 left-0 right-0  bottom-0">
+                                {messagesWithOutDupes.map((msg) => (
+                                    // eslint-disable-next-line react/jsx-key
+                                    <div className="" key={msg.id}>
+                                        <div
+                                            className={
+                                                msg.sender === userId
+                                                    ? "text-right"
+                                                    : "text-left"
+                                            }
+                                        >
+                                            <div
+                                                className={
+                                                    "inline-block text-left p-2 m-1 rounded-md text-sm " +
+                                                    (msg.sender === userId
+                                                        ? "bg-blue-600 text-white"
+                                                        : "bg-slate-200 text-gray-600")
+                                                }
+                                            >
+                                                {msg.text}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                                <div className="" ref={divUnderMessages}></div>
+                            </div>
                         </div>
                     )}
 
