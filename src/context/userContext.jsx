@@ -1,5 +1,4 @@
-import axios from "axios";
-import { createContext, useEffect, useState } from "react";
+import { createContext, useState } from "react";
 
 export const UserContext = createContext();
 
@@ -7,22 +6,18 @@ export const UserContext = createContext();
 const UserContextProvider = ({ children }) => {
     const [username, setUsername] = useState(null);
     const [userId, setUserId] = useState(null);
+    const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        axios
-            .get("/profile")
-            .then((res) => {
-                console.log(res);
-                setUsername(res.data.username);
-                setUserId(res.data.userId);
-            })
-            .catch((err) => {
-                console.log(err);
-            });
-    }, []);
     return (
         <UserContext.Provider
-            value={{ userId, username, setUserId, setUsername }}
+            value={{
+                userId,
+                username,
+                setUserId,
+                setUsername,
+                loading,
+                setLoading,
+            }}
         >
             {children}
         </UserContext.Provider>
